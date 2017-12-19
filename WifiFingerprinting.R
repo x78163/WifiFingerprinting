@@ -5,6 +5,7 @@ library(e1071)
 library(C50)
 library(scatterplot3d)
 library(plotly)
+library(stats)
 
 #-----------------> Set Local Variables --------------------------------------------------
 
@@ -34,14 +35,42 @@ trainingData$RELATIVEPOSITION=as.factor(trainingData$RELATIVEPOSITION)
 trainingData$USERID=as.factor(trainingData$USERID)
 trainingData$PHONEID=as.factor(trainingData$PHONEID)
 
+trainingData1 <- trainingData[,1:520]
+trainingData1 <- apply(trainingData1, 2, as.numeric)
+trainingData2 <- trainingData[,521:526]
+
+nzv <- nearZeroVar(trainingData1,
+                   saveMetrics = TRUE)
+cutOff= .01
+
+dim(nzv[nzv$percentUnique > cutOff,])
+
+colz <- c(rownames(nzv[nzv$percentUnique > cutOff,]))
+
+new_trainingData1 <-
+  as.data.frame(trainingData1[,colz])
+
+remove(cutOff)
+remove(colz)
+remove(nzv)
+
 #----------- > Set Sample Size --------------------
+
 sampleIndex = sample(1:nrow(trainingData), 100)#<--------Size of your sample...smaller= faster but less accurate.
+
 
 #----------- > create Sample Dataframe called microTraining --------------------
 microTraining = trainingData[sampleIndex,]
 
+
+
+
 #----------- > Remove all Rows with NA  ---------------------------------------------------------------------------
 microTraining = na.omit((microTraining))
+
+nearZeroVar(microTraining,
+            saveMetrics = TRUE)
+
 
 #----------- > Remove all columns with only 100's --------------------
 shrunk = microTraining[, !apply(microTraining == 100, 2, all)] #<----- Removes all solid 100 Columns
