@@ -10,6 +10,7 @@ library(plotly)
 
 threshold = -10 #  The decibel threshold that you want to filter (i.e. remove all values less than -90 (-90 to -100) and replace with 100)
 
+
 #------------------> ENABLE LOCAL FILE ----------------------------------------
 trainingData <- read_csv("C:/Users/josep/Downloads/UJIndoorLoc/UJIndoorLoc/trainingData.csv",
                          col_types = cols(BUILDINGID = col_character(),
