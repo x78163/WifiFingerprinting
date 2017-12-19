@@ -19,6 +19,9 @@ trainingData <- read_csv("C:/Users/josep/Downloads/UJIndoorLoc/UJIndoorLoc/train
                                           RELATIVEPOSITION = col_character(),
                                           USERID = col_character()))
 
+validationData <- read.csv("C:/Users/josep/Downloads/UJIndoorLoc/UJIndoorLoc/validationData.csv",
+                           check.names=TRUE)
+
 #------------------> ENABLE GOOGLE DRIVE FILE ----------------------------------------
 # trainingData <- read_csv("https://drive.google.com/uc?id=14oWD_ryEpUDb221zXwtN9ZFwkP7pvB2J", 
 #                          col_types = cols(BUILDINGID = col_character(), 
@@ -32,12 +35,26 @@ trainingData$LATITUDE = as.numeric(trainingData$LATITUDE)
 trainingData$BUILDINGID =as.factor(trainingData$BUILDINGID)
 trainingData$SPACEID=as.factor(trainingData$SPACEID)
 trainingData$RELATIVEPOSITION=as.factor(trainingData$RELATIVEPOSITION)
-trainingData$USERID=as.factor(trainingData$USERID)
-trainingData$PHONEID=as.factor(trainingData$PHONEID)
+trainingData$USERID=NULL
+trainingData$PHONEID=NULL
+trainingData$TIMESTAMP=NULL
+
+validationData$FLOOR = as.factor(validationData$FLOOR)
+validationData$LATITUDE = as.numeric(validationData$LATITUDE)
+validationData$BUILDINGID =as.factor(validationData$BUILDINGID)
+validationData$SPACEID=as.factor(validationData$SPACEID)
+validationData$RELATIVEPOSITION=as.factor(validationData$RELATIVEPOSITION)
+validationData$USERID=NULL
+validationData$PHONEID=NULL
+validationData$TIMESTAMP=NULL
 
 trainingData1 <- trainingData[,1:520]
 trainingData1 <- apply(trainingData1, 2, as.numeric)
 trainingData2 <- trainingData[,521:526]
+
+validationData1 <- validationData[,1:520]
+validationData1 <- apply(validationData1, 2, as.numeric)
+validationData2 <- validationData[,521:526]
 
 nzv <- nearZeroVar(trainingData1,
                    saveMetrics = TRUE)
@@ -50,10 +67,16 @@ colz <- c(rownames(nzv[nzv$percentUnique > cutOff,]))
 new_trainingData1 <-
   as.data.frame(trainingData1[,colz])
 
+new_validationData1 <-
+  as.data.frame(validationData1[,colz])
+
 remove(cutOff)
 remove(colz)
 remove(nzv)
 
+
+all.equal(colnames(new_trainingData1),
+          colnames(new_validationData1))
 #----------- > Set Sample Size --------------------
 
 sampleIndex = sample(1:nrow(trainingData), 100)#<--------Size of your sample...smaller= faster but less accurate.
