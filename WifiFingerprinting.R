@@ -6,7 +6,20 @@ library(C50)
 library(scatterplot3d)
 library(plotly)
 library(stats)
-
+library(FactoMineR)
+library(doParallel)
+library(Amelia)
+library(factoextra)
+library(GGally)
+library(mlbench)
+library(doParallel)
+library(PerformanceAnalytics)
+library(dplyr)#for preprocessing data
+library(kknn)#ML
+library(ModelMetrics)#for the metrics
+library(randomForest)#ML
+library(foreach)
+library(MLmetrics)
 #-----------------> Set Local Variables --------------------------------------------------
 
 threshold = -10 #  The decibel threshold that you want to filter (i.e. remove all values less than -90 (-90 to -100) and replace with 100)
@@ -77,6 +90,354 @@ remove(nzv)
 
 all.equal(colnames(new_trainingData1),
           colnames(new_validationData1))
+normalize <- function(x) { return( (x +104) / (0 + 104) ) }
+pmatrix1 <- as.data.frame(apply(new_trainingData1,
+                                2,
+                                normalize))
+pmatrix2 <- as.data.frame(apply(new_validationData1,
+                                2, normalize))
+
+registerDoParallel(core = 4)
+princ <- prcomp(pmatrix1, scale=FALSE, center = FALSE)
+head(princ, 10)
+
+screeplot(princ,npcs = 80)
+
+plot(princ, xlab = "var")
+
+pmatrix1 <- as.matrix(pmatrix1)
+pmatrix2 <- as.matrix(pmatrix2)
+rotation <- princ$rotation
+brandnew_trainingData1 <- pmatrix1 %*% rotation
+brandnew_validationData1 <- pmatrix2 %*% rotation
+
+all.equal(brandnew_trainingData1, princ$x)
+
+colnames(trainingData2) <-  c("LO", "LA", "FL", "BU", "SP", "RP")
+colnames(validationData2) <- c("LO", "LA", "FL", "BU", "SP", "RP")
+
+comp <- 92
+new_trainingSet <-
+  as.data.frame(cbind(brandnew_trainingData1[,1:comp],
+                      trainingData2))
+#
+new_validationSet <-
+  as.data.frame(cbind(brandnew_validationData1[,1:comp],
+                      validationData2))
+
+write.csv(new_trainingSet, "new_training.csv",
+          row.names = FALSE)
+write.csv(new_validationSet, "new_validation.csv",
+          row.names = FALSE)
+
+
+
+missmap(trainingData)
+
+
+
+corr1 <- cor(trainingData1)
+corr2 <- trainingData2[,]
+ggcorr(corr1, label = TRUE)
+ggcorr(corr2, label = TRUE)
+
+
+fviz_eig(princ, addlabels = TRUE,
+         linecolor = "chocolate1",
+         barfill="white",
+         barcolor ="darkblue")
+
+training <- read.csv("new_training.csv",
+                     sep=",", as.is = TRUE)
+validation <- read.csv("new_validation.csv",
+                       sep=",", as.is = TRUE)
+
+training$RP <- NULL
+training$SP <- NULL
+training$BU <- NULL
+#
+validation$RP <- NULL
+validation$SP <- NULL
+validation$BU <- NULL
+
+c <- as.numeric(ncol(training))
+Classes <- training[,c(1:c)]
+#Classes & Features
+LO <- as.data.frame(training[,c(1:(c-3),(c-2))])
+LA <- as.data.frame(training[,c(1:(c-3),(c-1))])
+FL <- as.data.frame(training[,c(1:(c-3),(c))])
+LO2 <- validation[,c(1:(c-3),(c-2))]
+LA2 <- validation[,c(1:(c-3),(c-1))]
+FL2 <- validation[,c(1:(c-3),(c))]
+
+set.seed(601)
+trainIndex5 <- createDataPartition(y = LO$LO,
+                                   p = .70,
+                                   list = FALSE)
+LOTrain <- as.data.frame(LO[trainIndex5,])
+LOTest <-  as.data.frame(LO[-trainIndex5,])
+
+#Latitude - create data partition####
+set.seed(601)
+trainIndex6 <- createDataPartition(y = LA$LA,
+                                   p = .70,
+                                   list = FALSE)
+LATrain <- as.data.frame(LA[trainIndex6,])
+LATest <-  as.data.frame(LA[-trainIndex6,])
+
+#Altitude(Floor) - create data partition####
+set.seed(601)
+trainIndex7 <- createDataPartition(y = FL$FL,
+                                   p = .70,
+                                   list = FALSE)
+FLTrain <- as.data.frame(FL[trainIndex7,])
+FLTest <-  as.data.frame(FL[-trainIndex7,])
+
+
+ctrl <- trainControl(method = "repeatedcv",
+                     repeats = 3,
+                     summaryFunction = multiClassSummary)
+ctrl1 <- trainControl(method = "repeatedcv",
+                      summaryFunction = multiClassSummary,
+                      repeats = 3)
+ctrlk <- trainControl(method = "cv",
+                      number = 10,
+                      summaryFunction = multiClassSummary,
+                      classProbs = TRUE,
+                      allowParallel = T)
+ctrlS <- trainControl(method = "repeatedcv",
+                      repeats = 3,
+                      classProbs = TRUE)
+ctrl2 <- trainControl(method = "repeatedcv",
+                      summaryFunction = twoClassSummary,
+                      repeats = 3,
+                      classProbs = TRUE)
+
+train <- as.data.frame(LOTrain[,])
+test <- as.data.frame(LOTest[,])
+
+
+set.seed(601)
+tkkn_LO <- system.time(
+  kknn_LO <- train.kknn(LO~.,
+                        data = train,
+                        trControl = ctrl,
+                        method = "kknn",
+                        method = "optimal",
+                        kmax = 5)
+)
+#to save the model
+save(kknn_LO, file = "ModelLongitudeKNN.rda")
+#
+#prediction
+kknn_LO_predic <- predict(kknn_LO, LOTest)
+#@Capture metrics####
+kknn_LO_Summary <- capture.output(kknn_LO)
+cat("Summary", kknn_LO_Summary,
+    file = "summary of kknn_LO.txt",
+    sep = "\n",
+    append = TRUE)
+kknn_LO
+
+
+
+
+
+train <- as.matrix(train[,])
+test <- as.matrix(test[,])
+#
+
+
+set.seed(601)
+trf_LO <- system.time(
+  rf_LO <- randomForest(LO~.,
+                        data = train,
+                        method ='rf',
+                        trControl = ctrl,
+                        importance = TRUE,
+                        ntree= 500,
+                        maximize =TRUE
+  )
+)
+#save the model####
+save(rf_LO, file = "ModelLongitudeRF.rda")
+#
+#@prediction with the modelo####
+rf_LO_predic <- predict(rf_LO, LOTest, level = .95)
+#@CAPTURE metrics####
+rf_LO_Summary <- capture.output(rf_LO)
+cat("Summary", rf_LO_Summary,
+    file = "summary of rf_LO.txt",
+    sep = "\n",
+    append = TRUE)
+rf_LO
+
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+library(e1071)
+set.seed(601)
+tsvm_LO <- system.time(
+  svm_LO <- svm(LO ~ ., data = train,
+                trControl = ctrl,
+                preProc = c("center", "scale")
+  )
+)
+#@saving the model####
+save(svm_LO, file = "ModelLongitudSVM.rda")
+#
+#@prediccion del modelo####
+svm_LO_predic <- predict(svm_LO, LOTest, level = .95)
+#@CAPTURE Metrics of the model####
+svm_LO_Summary <- capture.output(svm_LO)
+cat("Summary", svm_LO_Summary,
+    file = "summary of svm_LO.txt",
+    sep = "\n",
+    append = TRUE)
+svm_LO
+
+#--------
+
+train <- as.data.frame(LATrain[,])
+test <- as.data.frame(LATest[,])
+trainPredictors <- as.data.frame(LATrain[,1:92])
+
+set.seed(601)
+tkkn_LA <- system.time(
+  kknn_LA <- train.kknn(LA~.,
+                        data = train,
+                        trControl = ctrl,
+                        method = "kknn",
+                        method = "optimal",
+                        kmax = 5)
+)
+#@guardar el modelo####
+save(kknn_LA, file = "ModelLatitudeKNN.rda")
+#
+#@prediccion del modelo####
+kknn_LA_predic <- predict(kknn_LA, LATest)
+#@CAPTURAR Metrica del modelo####
+kknn_LA_Summary <- capture.output(kknn_LA)
+cat("Summary", kknn_LA_Summary,
+    file = "summary of kknn_LA.txt",
+    sep = "\n",
+    append = TRUE)
+kknn_LA
+
+
+train <- as.matrix(train[,])
+test <- as.matrix(test[,])
+#
+library(randomForest)
+library(e1071)
+library(foreach)
+set.seed(601)
+trf_LA <- system.time(
+  rf_LA <- randomForest(LA~.,
+                        data = train,
+                        method ='rf',
+                        trControl = ctrl,
+                        importance = TRUE,
+                        ntree= 500,
+                        maximize =TRUE
+  )
+)
+#save the model####
+save(rf_LA, file = "ModelLatitudeRF.rda")
+#
+#@prediction with the modelo####
+rf_LA_predic <- predict(rf_LA, LATest, level = .95)
+#@CAPTURE metrics####
+rf_LA_Summary <- capture.output(rf_LA)
+cat("Summary", rf_LA_Summary,
+    file = "summary of rf_LA.txt",
+    sep = "\n",
+    append = TRUE)
+rf_LA
+
+library(e1071)
+set.seed(601)
+tsvm_LA <- system.time(
+  svm_LA <- svm(LA~.,
+                data = train,
+                trControl = ctrl,
+                preProc = c("center", "scale")
+  )
+)
+#@saving the model####
+save(svm_LA, file = "ModelLatitudeSVM.rda")
+#
+#@prediction with the model####
+svm_LA_predic <- predict(svm_LA, LATest, level = .95)
+#@CAPTURE Metrics of the model LA####
+svm_LA_Summary <- capture.output(svm_LA)
+cat("Summary", svm_LA_Summary,
+    file = "summary of svm_LA.txt",
+    sep = "\n",
+    append = TRUE)
+kknn_LA
+
+
+train <- as.data.frame(FLTrain[,])
+test <- as.data.frame(FLTest[,])
+trainPredictors <- as.data.frame(FLTrain[,1:92])
+
+test <- test %>% mutate(FL = ifelse(FL =="0", "A",
+                                    ifelse(FL =="1", "B",
+                                           ifelse(FL =="2", "c",
+                                                  ifelse(FL =="3", "D",
+                                                         ifelse(FL =="4", "E", " "))))))
+#
+train <- train %>% mutate(FL = ifelse(FL =="0", "A",
+                                      ifelse(FL =="1", "B",
+                                             ifelse(FL =="2", "c",
+                                                    ifelse(FL =="3", "D",
+                                                           ifelse(FL =="4", "E", " "))))))
+
+metric <- "Accuracy"
+#
+set.seed(601)
+tRF_FL <- system.time(
+  RF_FL <- caret::train(FL~.,
+                        train,
+                        method = "rf",
+                        trControl = ctrl,
+                        tune.randomForest="best.foo")
+)
+#
+#@save the model####
+save(RF_FL, file = "RF_FL.rda")
+#
+#@prediction with the model####
+RF_FL_predic <- predict(RF_FL, FLTest, level = .95)
+#@CAPTURE Metrics of the model####
+RF_FL_Summary <- capture.output(RF_FL)
+cat("Summary",RF_FL_Summary,
+    file = "summary of RF_FL.txt",
+    sep = "\n",
+    append =TRUE)
+#
+RF_FL
+
+library(C50)
+test <- as.data.frame(test)
+train <- as.data.frame(train)
+#train$FL <- as.factor(train$FL)
+set.seed(601)
+tc50_FL <- system.time(
+  c50_FL <- caret::train(FL~. ,
+                         data = train,
+                         method = "C5.0",
+                         trControl = c(ctrlk, noGlobalPruning = TRUE)
+  )
+)
+#@saving the model####
+save(c50_FL, file = "ModelFloorC50.rda")
+#prediction with the model####
+c50_FL_predic <- predict(c50_FL, FLTest, level = .95, type = "raw")
+#
+c50_FL
+
+
 #----------- > Set Sample Size --------------------
 
 sampleIndex = sample(1:nrow(trainingData), 100)#<--------Size of your sample...smaller= faster but less accurate.
