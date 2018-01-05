@@ -7,12 +7,12 @@ library(scatterplot3d)
 library(plotly)
 library(stats)
 library(FactoMineR)
-library(doParallel)
+
 library(Amelia)
 library(factoextra)
 library(GGally)
 library(mlbench)
-library(doParallel)
+
 library(PerformanceAnalytics)
 library(dplyr)#for preprocessing data
 library(kknn)#ML
@@ -97,7 +97,7 @@ pmatrix1 <- as.data.frame(apply(new_trainingData1,
 pmatrix2 <- as.data.frame(apply(new_validationData1,
                                 2, normalize))
 
-registerDoParallel(core = 4)
+
 princ <- prcomp(pmatrix1, scale=FALSE, center = FALSE)
 head(princ, 10)
 
@@ -120,10 +120,11 @@ comp <- 92
 new_trainingSet <-
   as.data.frame(cbind(brandnew_trainingData1[,1:comp],
                       trainingData2))
-#
+
 new_validationSet <-
   as.data.frame(cbind(brandnew_validationData1[,1:comp],
                       validationData2))
+
 
 write.csv(new_trainingSet, "new_training.csv",
           row.names = FALSE)
@@ -132,20 +133,35 @@ write.csv(new_validationSet, "new_validation.csv",
 
 
 
-missmap(trainingData)
-
-
-
-corr1 <- cor(trainingData1)
-corr2 <- trainingData2[,]
-ggcorr(corr1, label = TRUE)
-ggcorr(corr2, label = TRUE)
-
-
+# missmap(trainingData)
+# 
+# 
+# 
+ corr1 <- cor(trainingData1)
+ corr2 <- trainingData2[,]
+ ggcorr(corr1, label = TRUE)
+ ggcorr(corr2, label = TRUE)
+# 
+# 
 fviz_eig(princ, addlabels = TRUE,
          linecolor = "chocolate1",
          barfill="white",
          barcolor ="darkblue")
+
+#rm(list = setdiff(ls(), lsf.str()))
+library(readr)
+library(ggplot2)#graphs
+library(caret)#ML
+library(mlbench)
+
+library(PerformanceAnalytics)
+library(dplyr)#for preprocessing data
+library(kknn)#ML
+library(ModelMetrics)#for the metrics
+library(randomForest)#ML
+library(e1071)#ML
+library(foreach)
+library(MLmetrics)
 
 training <- read.csv("new_training.csv",
                      sep=",", as.is = TRUE)
@@ -176,7 +192,7 @@ trainIndex5 <- createDataPartition(y = LO$LO,
                                    list = FALSE)
 LOTrain <- as.data.frame(LO[trainIndex5,])
 LOTest <-  as.data.frame(LO[-trainIndex5,])
-
+#LOTest = LO$LO
 #Latitude - create data partition####
 set.seed(601)
 trainIndex6 <- createDataPartition(y = LA$LA,
@@ -184,15 +200,19 @@ trainIndex6 <- createDataPartition(y = LA$LA,
                                    list = FALSE)
 LATrain <- as.data.frame(LA[trainIndex6,])
 LATest <-  as.data.frame(LA[-trainIndex6,])
+#LATest = LA$LA
 
 #Altitude(Floor) - create data partition####
 set.seed(601)
 trainIndex7 <- createDataPartition(y = FL$FL,
                                    p = .70,
                                    list = FALSE)
+#FLTrain <- as.data.frame(sample_n(FL[trainIndex7,],1000))
+#FLTest <-  as.data.frame(sample_n(FL[-trainIndex7,],500))
+
 FLTrain <- as.data.frame(FL[trainIndex7,])
 FLTest <-  as.data.frame(FL[-trainIndex7,])
-
+#FLTest = FL$FL
 
 ctrl <- trainControl(method = "repeatedcv",
                      repeats = 3,
@@ -201,10 +221,9 @@ ctrl1 <- trainControl(method = "repeatedcv",
                       summaryFunction = multiClassSummary,
                       repeats = 3)
 ctrlk <- trainControl(method = "cv",
-                      number = 10,
+                      number = 3,
                       summaryFunction = multiClassSummary,
-                      classProbs = TRUE,
-                      allowParallel = T)
+                      classProbs = TRUE)
 ctrlS <- trainControl(method = "repeatedcv",
                       repeats = 3,
                       classProbs = TRUE)
@@ -239,8 +258,9 @@ cat("Summary", kknn_LO_Summary,
     append = TRUE)
 kknn_LO
 
-
-
+postResample(kknn_LO_predic, LOTest$LO)
+# RMSE   Rsquared        MAE 
+# 10.8824778  0.9922169  3.7839239 ---------------------------->99.2%   +/1 10.8 meters  3.7 MAE   
 
 
 train <- as.matrix(train[,])
@@ -263,7 +283,7 @@ trf_LO <- system.time(
 save(rf_LO, file = "ModelLongitudeRF.rda")
 #
 #@prediction with the modelo####
-rf_LO_predic <- predict(rf_LO, LOTest, level = .95)
+rf_LO_predic <- predict(rf_LO, LO, level = .95)
 #@CAPTURE metrics####
 rf_LO_Summary <- capture.output(rf_LO)
 cat("Summary", rf_LO_Summary,
@@ -271,6 +291,12 @@ cat("Summary", rf_LO_Summary,
     sep = "\n",
     append = TRUE)
 rf_LO
+
+postResample(rf_LO_predic, LO$LO)
+# RMSE  Rsquared       MAE 
+# 9.3208231 0.9942983 5.0118341  ---------------------------->99.4%   +/1 9.32 meters  5.0 MAE  #### Use RF
+predicted = data.frame(rf_LO_predic)
+predicted$LO =  rf_LO_predic
 
 train <- as.data.frame(train)
 test <- as.data.frame(test)
@@ -295,6 +321,11 @@ cat("Summary", svm_LO_Summary,
     append = TRUE)
 svm_LO
 
+postResample(svm_LO_predic, LOTest$LO)
+
+# RMSE   Rsquared        MAE 
+# 12.2025369  0.9904231  8.8526794   ---------------------------->99.0%   +/- 12.2 meters  8.89 MAE
+
 #--------
 
 train <- as.data.frame(LATrain[,])
@@ -314,7 +345,7 @@ tkkn_LA <- system.time(
 save(kknn_LA, file = "ModelLatitudeKNN.rda")
 #
 #@prediccion del modelo####
-kknn_LA_predic <- predict(kknn_LA, LATest)
+kknn_LA_predic <- predict(kknn_LA, LA)
 #@CAPTURAR Metrica del modelo####
 kknn_LA_Summary <- capture.output(kknn_LA)
 cat("Summary", kknn_LA_Summary,
@@ -323,10 +354,13 @@ cat("Summary", kknn_LA_Summary,
     append = TRUE)
 kknn_LA
 
+postResample(kknn_LA_predic, LA$LA)
+# RMSE  Rsquared       MAE 
+# 7.1818880 0.9885711 2.9867929    ---------------------------->98.8%   +/- 7.18 meters  2.98 MAE #### USE KNN----------------
+predicted$LA =  kknn_LA_predic
 
-train <- as.matrix(train[,])
-test <- as.matrix(test[,])
-#
+
+
 library(randomForest)
 library(e1071)
 library(foreach)
@@ -353,6 +387,9 @@ cat("Summary", rf_LA_Summary,
     sep = "\n",
     append = TRUE)
 rf_LA
+postResample(rf_LA_predic, LATest$LA)
+# RMSE  Rsquared       MAE 
+# 7.1187916 0.9888136 4.0108987    ---------------------------->98.8%   +/- 7.11 meters  4.01 MAE
 
 library(e1071)
 set.seed(601)
@@ -376,9 +413,14 @@ cat("Summary", svm_LA_Summary,
     append = TRUE)
 kknn_LA
 
+postResample(svm_LA_predic, LATest$LA)
+# RMSE  Rsquared       MAE 
+# 8.1598148 0.9853598 5.7885475    ---------------------------->98.5%   +/- 8.15 meters  5.7 MAE
+
 
 train <- as.data.frame(FLTrain[,])
 test <- as.data.frame(FLTest[,])
+
 trainPredictors <- as.data.frame(FLTrain[,1:92])
 
 test <- test %>% mutate(FL = ifelse(FL =="0", "A",
@@ -395,6 +437,9 @@ train <- train %>% mutate(FL = ifelse(FL =="0", "A",
 
 metric <- "Accuracy"
 #
+test <- test #as.matrix(test)
+train <- train #as.matrix(train)
+R_MAX_MEM_SIZE <- memory.limit(size = 80000)
 set.seed(601)
 tRF_FL <- system.time(
   RF_FL <- caret::train(FL~.,
@@ -408,7 +453,7 @@ tRF_FL <- system.time(
 save(RF_FL, file = "RF_FL.rda")
 #
 #@prediction with the model####
-RF_FL_predic <- predict(RF_FL, FLTest, level = .95)
+RF_FL_predic <- predict(RF_FL, FL, level = .95)
 #@CAPTURE Metrics of the model####
 RF_FL_Summary <- capture.output(RF_FL)
 cat("Summary",RF_FL_Summary,
@@ -695,53 +740,177 @@ modelRFlong <- train(LONGITUDE ~ ., data = training[, c(1:(ncol(shrunk)-9), (nco
 #---------------------------------<<<<<< Classification PROBLEM >>>>>>>>>>>>> ----------------------------------------------------
 training = na.omit(training)
 #-------------------------------------------------------------> FUNCTIONAL
-modelknnFloor <- train(FLOOR ~ ., data = training[, c(1:(ncol(shrunk)-9), (ncol(shrunk)-5), (ncol(shrunk)-8), (ncol(shrunk)-7), (ncol(shrunk)-6))],
-                       method = "knn", 
+modelrfFloor <- train(FL ~ .,train, method = "rf", 
                        #trControl = fitControl, 
                        preProcess = c("center","scale")) 
 
-# k  Accuracy   Kappa    
-# 5  0.5819402  0.4567261
-# 7  0.5921799  0.4695678
-# 9  0.6016781  0.4816753
+save(modelrfFloor, file = "modelrfFloor.rda")
+
+modelrfFloor_predic <- predict(modelrfFloor, FL, level = .95, type = "raw")
+# 
+# mtry  Accuracy   Kappa    
+# 2    0.9571545  0.9444037  ----------------------------------------------------------95.7%
+# 47    0.9543390  0.9408286
+# 92    0.9350409  0.9158072
 
 #-------------------------------------------------------------> FUNCTIONAL
-modelsvmFloor <- train(FLOOR ~ ., data = training[, c(1:(ncol(shrunk)-9), (ncol(shrunk)-5), (ncol(shrunk)-8), (ncol(shrunk)-7), (ncol(shrunk)-6))],
-                       method = "svmLinear2", 
-                       #trControl = fitControl, 
-                       preProcess = c("center","scale")) 
+
+modelsvmFloor <- train(FL ~ .,train, method = "svmLinear2", 
+                      #trControl = fitControl, 
+                      preProcess = c("center","scale")) 
+
+save(modelsvmFloor, file = "modelsvmFloor.rda")
+modelsvmFloor_predic <- predict(modelsvmFloor, FLTest, level = .95, type = "raw")
 
 # cost  Accuracy   Kappa    
-# 0.25  0.7875237  0.7232133
-# 0.50  0.7875237  0.7232133
-# 1.00  0.7875237  0.7232133
+# 0.25  0.9109623  0.8847679 ----------------------------------------------------------91.0%
+# 0.50  0.9107631  0.8845074
+# 1.00  0.9105301  0.8842130
 
 #-------------------------------------------------------------> FUNCTIONAL
-modelGBMfloor = train(FLOOR ~ ., data = training[, c(1:(ncol(shrunk)-9), (ncol(shrunk)-5), (ncol(shrunk)-8), (ncol(shrunk)-7), (ncol(shrunk)-6))],
-                      method = "gbm", 
-                      preProcess = c("center","scale") )
 
+modelGBMfloor <- train(FL ~ .,train, method = "gbm", 
+                       #trControl = fitControl, 
+                       preProcess = c("center","scale")) 
 
+modelGBMfloor
+save(modelGBMfloor, file = "modelGBMfloor.rda")
+modelGBMfloor_predic <- predict(modelGBMfloor, FLTest, level = .95, type = "raw")
+# interaction.depth  n.trees  Accuracy   Kappa    
+# 1                   50      0.7360606  0.6569127
+# 1                  100      0.8017442  0.7426077
+# 1                  150      0.8346030  0.7854091
+# 2                   50      0.8266362  0.7749576
+# 2                  100      0.8772977  0.8408612
+# 2                  150      0.8986358  0.8685864
+# 3                   50      0.8638956  0.8233938
+# 3                  100      0.9041141  0.8756862
+# 3                  150      0.9198572  0.8961262 ------------------------------------91.9%
 
 
 
 #-------------------------------------------------------------> FUNCTIONAL
-modelRFfloor <- train(FLOOR ~ ., data = training[, c(1:(ncol(shrunk)-9), (ncol(shrunk)-5), (ncol(shrunk)-8), (ncol(shrunk)-7), (ncol(shrunk)-6))], 
-                      method = "rf",  
-                      ntree = 1)
 
 
+modelNBfloor <- train(FL ~ .,train, method = "nb", 
+                       #trControl = fitControl, 
+                       preProcess = c("center","scale")) 
 
-#-------------------------------------------------------------> FUNCTIONAL
-modelNBfloor <- train(FLOOR ~ ., data = training[, c(1:(ncol(shrunk)-9), (ncol(shrunk)-5), (ncol(shrunk)-8), (ncol(shrunk)-7), (ncol(shrunk)-6))],
-                      method = "nb",  
-                      preProcess = c("center","scale"))
+modelNBfloor
+save(modelNBfloor, file = "modelNBfloor.rda")
+modelNBfloor_predic <- predict(modelNBfloor, FLTest, level = .95, type = "raw")
 
+# usekernel  Accuracy   Kappa    
+# FALSE      0.5601935  0.4446891
+# TRUE      0.7809854  0.7158685 ----------------------------------------------------------78.0%
 #-------------------------------------------------------------------> FUNCTIONAL
-modelC50floor <- train(FLOOR ~ ., data = training[, c(1:(ncol(shrunk)-9), (ncol(shrunk)-5), (ncol(shrunk)-8), (ncol(shrunk)-7), (ncol(shrunk)-6))],
-                       method = "C5.0",
-                       preProcess = c("center","scale"))
 
+modelC50floor <- train(FL ~ .,train, method = "C5.0", 
+                      #trControl = fitControl, 
+                      preProcess = c("center","scale")) 
+modelC50floor
+save(modelC50floor, file = "modelC50floor.rda")
+
+# model  winnow  trials  Accuracy   Kappa    
+# rules  FALSE    1      0.8744989  0.8375387
+# rules  FALSE   10      0.9377433  0.9194032
+# rules  FALSE   20      0.9454879  0.9294176
+# rules   TRUE    1      0.8751440  0.8383766
+# rules   TRUE   10      0.9379572  0.9196638
+# rules   TRUE   20      0.9457186  0.9297022
+# tree   FALSE    1      0.8708460  0.8328153
+# tree   FALSE   10      0.9368102  0.9181413
+# tree   FALSE   20      0.9443392  0.9278929
+# tree    TRUE    1      0.8712489  0.8333425
+# tree    TRUE   10      0.9357943  0.9168265
+# tree    TRUE   20      0.9439322  0.9273638
+
+modelC50floor_predic <- predict(modelC50floor, FLTest, level = .95, type = "raw")
+
+
+modelGBMfloor
+modelNBfloor
+modelC50floor
+
+modelrfFloor_predic=as.data.frame(modelrfFloor_predic)
+modelsvmFloor_predic=as.data.frame(modelsvmFloor_predic)
+modelNBfloor_predic=as.data.frame(modelNBfloor_predic)
+modelGBMfloor_predic=as.data.frame(modelGBMfloor_predic)
+modelC50floor_predic=as.data.frame(modelC50floor_predic)
+
+modelrfFloor_predic <- modelrfFloor_predic %>% mutate(modelrfFloor_predic = ifelse(modelrfFloor_predic =="A", "0",
+                                                                                      ifelse(modelrfFloor_predic =="B", "1",
+                                                                                             ifelse(modelrfFloor_predic =="c", "2",
+                                                                                                    ifelse(modelrfFloor_predic =="D", "3",
+                                                                                                           ifelse(modelrfFloor_predic =="E", "4", " "))))))
+
+modelsvmFloor_predic <- modelsvmFloor_predic %>% mutate(modelsvmFloor_predic = ifelse(modelsvmFloor_predic =="A", "0",
+                                                                                      ifelse(modelsvmFloor_predic =="B", "1",
+                                                                                             ifelse(modelsvmFloor_predic =="c", "2",
+                                                                                                    ifelse(modelsvmFloor_predic =="D", "3",
+                                                                                                           ifelse(modelsvmFloor_predic =="E", "4", " "))))))
+
+modelNBfloor_predic <- modelNBfloor_predic %>% mutate(modelNBfloor_predic = ifelse(modelNBfloor_predic =="A", "0",
+                                                                                      ifelse(modelNBfloor_predic =="B", "1",
+                                                                                             ifelse(modelNBfloor_predic =="c", "2",
+                                                                                                    ifelse(modelNBfloor_predic =="D", "3",
+                                                                                                           ifelse(modelNBfloor_predic =="E", "4", " "))))))
+
+modelGBMfloor_predic <- modelGBMfloor_predic %>% mutate(modelGBMfloor_predic = ifelse(modelGBMfloor_predic =="A", "0",
+                                                                                      ifelse(modelGBMfloor_predic =="B", "1",
+                                                                                             ifelse(modelGBMfloor_predic =="c", "2",
+                                                                                                    ifelse(modelGBMfloor_predic =="D", "3",
+                                                                                                           ifelse(modelGBMfloor_predic =="E", "4", " "))))))
+
+
+modelC50floor_predic <- modelC50floor_predic %>% mutate(modelC50floor_predic = ifelse(modelC50floor_predic =="A", "0",
+                                                                                      ifelse(modelC50floor_predic =="B", "1",
+                                                                                             ifelse(modelC50floor_predic =="c", "2",
+                                                                                                    ifelse(modelC50floor_predic =="D", "3",
+                                                                                                           ifelse(modelC50floor_predic =="E", "4", " "))))))
+
+modelrfFloor_predic$modelrfFloor_predic = as.numeric(modelrfFloor_predic$modelrfFloor_predic)
+modelsvmFloor_predic$modelsvmFloor_predic = as.numeric(modelsvmFloor_predic$modelsvmFloor_predic)
+modelNBfloor_predic$modelNBfloor_predic = as.numeric(modelNBfloor_predic$modelNBfloor_predic)
+modelGBMfloor_predic$modelGBMfloor_predic = as.numeric(modelGBMfloor_predic$modelGBMfloor_predic)
+modelC50floor_predic$modelC50floor_predic = as.numeric(modelC50floor_predic$modelC50floor_predic)
+
+postResample(modelrfFloor_predic, FL$FL)
+postResample(modelsvmFloor_predic, FLTest$FL)
+postResample(modelNBfloor_predic, FLTest$FL)
+postResample(modelGBMfloor_predic, FLTest$FL)
+postResample(modelC50floor_predic, FLTest$FL)
+
+
+# #  RF
+# RMSE       Rsquared        MAE 
+# 0.23457605 0.96331742 0.04097675 --------------------96.3%  USE RF
+rfFloor_predic = modelrfFloor_predic$modelrfFloor_predic
+predicted$FL =  rfFloor_predic
+write.csv(predicted, "predicted.csv",
+          row.names = FALSE)
+
+actual = data.frame(LA$LA)
+actual$LO = LO$LO
+actual$FL = FL$FL
+write.csv(actual, "actual.csv",
+          row.names = FALSE)
+
+# #  SVM
+# RMSE        Rsquared        MAE 
+# 0.32019604 0.93281870 0.08914534 
+# 
+# #  NB
+# RMSE      Rsquared       MAE 
+# 0.5666780 0.7933419 0.2364944 
+# 
+# #  GBM
+# RMSE        Rsquared        MAE 
+# 0.32123903 0.93180047 0.08345877 
+# 
+# #  C50
+# RMSE        Rsquared        MAE 
+# 0.25043865 0.95860150 0.04833584 
 
 #summaries
 
